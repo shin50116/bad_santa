@@ -1,37 +1,427 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>산타와 루돌프 게임</title>
-    <style>
-        body { display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #2b2b2b; }
-        canvas { background: #87ceeb; display: none; }
-        #timer { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 24px; display: none; }
-        #hearts { position: absolute; top: 50px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 24px; display: none; }
-        #popup { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #fff; font-size: 24px; background-color: rgba(0, 0, 0, 0.7); padding: 20px; border-radius: 10px; text-align: center; }
-        #restartButton {
-            display: none; margin-top: 10px; padding: 10px 20px; font-size: 20px; color: #fff; background: #007bff;
-            border: none; border-radius: 5px; cursor: pointer;
-        }
-        #restartButton:hover { background: #0056b3; }
-        #startButton {
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            padding: 10px 20px; font-size: 20px; color: #fff; background: #007bff;
-            border: none; border-radius: 5px; cursor: pointer;
-        }
-        #startButton:hover { background: #0056b3; }
-    </style>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<style>
+  body {
+    margin:0; 
+    background:#333; 
+    color:#fff; 
+    font-family:sans-serif; 
+    overflow:hidden;
+    position:relative; 
+    width:100vw; 
+    height:100vh; 
+    display:flex; 
+    align-items:center; 
+    justify-content:center;
+  }
+
+  #timer {
+    position:absolute; 
+    top:20px; 
+    left:50%; 
+    transform:translateX(-50%);
+    font-size:24px; 
+    font-weight:bold; 
+    z-index:2001; /* 타이머를 가장 위로 */
+  }
+
+  #startBtn {
+    position:absolute; 
+    top:50%; 
+    left:50%; 
+    transform:translate(-50%,-50%);
+    font-size:24px; 
+    padding:15px 30px; 
+    background:#444; 
+    border:none; 
+    color:#fff; 
+    cursor:pointer; 
+    z-index:2001;
+  }
+
+  #gameContainer {
+    position:relative; 
+    width:800px; 
+    height:800px; 
+    background:#222; 
+    display:none; 
+    overflow:hidden; 
+    box-sizing:border-box; 
+  }
+
+  #lineCanvas {
+    position:absolute; 
+    top:0; 
+    left:0; 
+    pointer-events:none; 
+    width:800px; 
+    height:800px;
+    z-index:100;
+  }
+
+  .tile {
+    position:absolute; 
+    width:40px; 
+    height:40px; 
+    background:#fff; 
+    display:flex; 
+    align-items:center; 
+    justify-content:center; 
+    font-size:20px; 
+    border-radius:5px; 
+    box-shadow:0 0 5px rgba(0,0,0,0.5);
+    cursor:pointer; 
+    user-select:none; 
+    color:#000;
+    z-index:200;
+  }
+  .matched { background:transparent !important; cursor:default; color:transparent; }
+  .selected { outline:3px solid #f00; }
+
+  #congratsBox {
+    position:absolute; 
+    top:50%; 
+    left:50%; 
+    transform:translate(-50%,-50%);
+    background:rgba(0,0,0,0.8);
+    padding:20px;
+    border-radius:10px;
+    display:none;
+    flex-direction:column;
+    align-items:center;
+    color:#ff0;
+    z-index:2000;
+  }
+  #congratsBox h2 {
+    margin:0 0 10px;
+  }
+  #congratsBox input {
+    margin-bottom:10px;
+    padding:5px;
+    font-size:16px;
+  }
+  #congratsBox button {
+    background:#444; 
+    color:#fff; 
+    border:none; 
+    padding:10px 20px; 
+    cursor:pointer; 
+    font-size:16px;
+    margin-bottom:10px;
+  }
+  #retryBtn {
+    background:#555; 
+    color:#fff; 
+    border:none; 
+    padding:10px 20px; 
+    cursor:pointer; 
+    font-size:16px;
+    margin-top:10px;
+  }
+
+</style>
 </head>
 <body>
-    <div id="timer">0.00초</div>
-    <div id="hearts">❤️❤️❤️</div>
-    <canvas id="gameCanvas" width="400" height="600"></canvas>
-    <div id="popup">
-        총 버틴 시간: <span id="finalTime"></span> 초
-        <button id="restartButton">다시하기</button>
-    </div>
-    <button id="startButton">게임 시작</button>
-    <script src="game.js"></script>
+  <div id="timer">0.00초</div>
+  <button id="startBtn">시작</button>
+  <div id="gameContainer">
+    <canvas id="lineCanvas" width="800" height="800"></canvas>
+  </div>
+  <div id="congratsBox">
+    <h2>축하합니다!</h2>
+    <p id="finalTime"></p>
+    <p>이름을 입력하고 순위를 기록해보세요:</p>
+    <input type="text" id="playerName" placeholder="이름"/>
+    <button id="saveScore">기록하기</button>
+    <div id="scoreList"></div>
+    <button id="retryBtn" style="display:none;">다시하기</button>
+  </div>
+<script>
+(function(){
+  const startBtn = document.getElementById('startBtn');
+  const timerEl = document.getElementById('timer');
+  const gameContainer = document.getElementById('gameContainer');
+  const lineCanvas = document.getElementById('lineCanvas');
+  const ctx = lineCanvas.getContext('2d');
+  const congratsBox = document.getElementById('congratsBox');
+  const finalTimeEl = document.getElementById('finalTime');
+  const playerNameInput = document.getElementById('playerName');
+  const saveScoreBtn = document.getElementById('saveScore');
+  const scoreList = document.getElementById('scoreList');
+  const retryBtn = document.getElementById('retryBtn');
+
+  let tiles = [];
+  let grid = [];
+  let selectedTiles = [];
+  let matchedCount = 0;
+  let startTime = null;
+  let timerInterval = null;
+
+  const rows = 10;
+  const cols = 10;
+  const tileCount = rows*cols;
+  const pairs = tileCount/2;
+
+  const tileSize = 40;
+  const gap = 5;
+  const boardWidth = cols*(tileSize+gap)-gap;
+  const boardHeight = rows*(tileSize+gap)-gap;
+  const offsetX = (800 - boardWidth)/2;
+  const offsetY = (800 - boardHeight)/2;
+
+  const pokemonTiles = [
+    "⚡","🔥","💧","🍀","🐛",
+    "🐜","🕊","🐭","🦇","🔮",
+    "🪨","🦊","✨","🎵","💤",
+    "😸","🐟","🐉","🗿","zZz"
+  ];
+
+  let scoreSubmitted = false; // 기록 완료 상태 관리
+
+  function loadScores(){
+    let scores = JSON.parse(localStorage.getItem('scores')||"[]");
+    return scores;
+  }
+
+  function saveScores(scores){
+    localStorage.setItem('scores', JSON.stringify(scores));
+  }
+
+  function showScores(){
+    let scores = loadScores();
+    scores.sort((a,b)=>a.time - b.time);
+    let html = "<h3>순위</h3><ol>";
+    for(let i=0;i<Math.min(scores.length,5);i++){
+      html+=`<li>${scores[i].name}: ${scores[i].time.toFixed(2)}초</li>`;
+    }
+    html+="</ol>";
+    scoreList.innerHTML = html;
+    retryBtn.style.display='block';
+  }
+
+  function createTiles() {
+    let arr = [];
+    for (let i=0; i<pairs; i++){
+      let s = pokemonTiles[i % pokemonTiles.length];
+      arr.push(s,s);
+    }
+    for (let i = arr.length - 1; i>0; i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [arr[i],arr[j]]=[arr[j],arr[i]];
+    }
+    return arr;
+  }
+
+  function drawBoard() {
+    gameContainer.querySelectorAll('.tile').forEach(t=>t.remove());
+    grid = [];
+    for(let r=0; r<rows; r++){
+      grid[r]=[];
+      for(let c=0; c<cols; c++){
+        const val = tiles[r*cols+c];
+        grid[r][c] = val;
+        const tile = document.createElement('div');
+        tile.className='tile';
+        tile.style.left=(offsetX + c*(tileSize+gap))+'px';
+        tile.style.top=(offsetY + r*(tileSize+gap))+'px';
+        tile.dataset.row=r;
+        tile.dataset.col=c;
+        tile.dataset.value=val;
+        tile.textContent=val;
+        tile.addEventListener('click', onTileClick);
+        gameContainer.appendChild(tile);
+      }
+    }
+  }
+
+  function onTileClick(e) {
+    const tile = e.currentTarget;
+
+    // 토글 선택 기능
+    if(tile.classList.contains('selected')){
+      tile.classList.remove('selected');
+      selectedTiles = selectedTiles.filter(t=>t!==tile);
+      return;
+    }
+
+    if(tile.classList.contains('matched')) return;
+
+    if (selectedTiles.length>=2) return;
+
+    tile.classList.add('selected');
+    selectedTiles.push(tile);
+    if(selectedTiles.length===2) checkMatch();
+  }
+
+  function checkMatch() {
+    const [t1,t2]=selectedTiles;
+    const v1=t1.dataset.value,v2=t2.dataset.value;
+    const r1=+t1.dataset.row,c1=+t1.dataset.col;
+    const r2=+t2.dataset.row,c2=+t2.dataset.col;
+    if(v1===v2){
+      const path=findPath(r1,c1,r2,c2);
+      if(path){
+        drawConnectionLine(path);
+        setTimeout(()=>{
+          clearLine();
+          t1.remove();
+          t2.remove();
+          grid[r1][c1]=null;grid[r2][c2]=null;
+          matchedCount+=2;selectedTiles=[];
+          if(matchedCount===tileCount){
+            clearInterval(timerInterval);
+            endGame();
+          }
+        },500);
+      } else {
+        setTimeout(()=>{
+          t1.classList.remove('selected');t2.classList.remove('selected');
+          selectedTiles=[];
+        },500);
+      }
+    } else {
+      setTimeout(()=>{
+        t1.classList.remove('selected');t2.classList.remove('selected');
+        selectedTiles=[];
+      },500);
+    }
+  }
+
+  // 외곽 경로 허용, 최대 3회 꺾기
+  function canPass(rr,cc){
+    if(rr< -1||rr>rows||cc<-1||cc>cols) return false; 
+    if(rr<0||rr>=rows||cc<0||cc>=cols) return true; 
+    return grid[rr][cc]==null;
+  }
+
+  function findPath(r1,c1,r2,c2){
+    if(r1===r2&&c1===c2) return null;
+    const directions=[[0,-1],[0,1],[ -1,0],[1,0]];
+    let visited=new Set();
+    let queue=[];
+
+    let originalVal1=grid[r1][c1];
+    let originalVal2=grid[r2][c2];
+    grid[r1][c1]=null;
+    grid[r2][c2]=null;
+
+    for(let i=0;i<directions.length;i++){
+      const key=r1+","+c1+",0,"+i;
+      visited.add(key);
+      queue.push({r:r1,c:c1,turnCount:0,dir:i,path:[[r1,c1]]});
+    }
+
+    while(queue.length>0){
+      const cur=queue.shift();
+      const {r,c,turnCount,dir,path}=cur;
+      if(r===r2&&c===c2){
+        grid[r1][c1]=originalVal1;
+        grid[r2][c2]=originalVal2;
+        return path;
+      }
+
+      const [dx,dy]=directions[dir];
+      let nr=r+dy,nc=c+dx;
+      if(canPass(nr,nc)){
+        let key=nr+","+nc+","+turnCount+","+dir;
+        if(!visited.has(key)){
+          visited.add(key);
+          queue.push({r:nr,c:nc,turnCount:turnCount,dir:dir,path:[...path,[nr,nc]]});
+        }
+      }
+      if(turnCount<3){
+        for(let nd=0;nd<4;nd++){
+          if(nd===dir)continue;
+          const [dx2,dy2]=directions[nd];
+          let nr2=r+dy2,nc2=c+dx2;
+          if(canPass(nr2,nc2)){
+            let key2=nr2+","+nc2+","+(turnCount+1)+","+nd;
+            if(!visited.has(key2)){
+              visited.add(key2);
+              queue.push({r:nr2,c:nc2,turnCount:turnCount+1,dir:nd,path:[...path,[nr2,nc2]]});
+            }
+          }
+        }
+      }
+    }
+
+    grid[r1][c1]=originalVal1;
+    grid[r2][c2]=originalVal2;
+    return null;
+  }
+
+  function drawConnectionLine(path){
+    clearLine();
+    ctx.strokeStyle='yellow';
+    ctx.lineWidth=3;
+    ctx.beginPath();
+    for(let i=0;i<path.length;i++){
+      const [rr,cc]=path[i];
+      const x=offsetX + cc*(tileSize+gap)+(tileSize/2);
+      const y=offsetY + rr*(tileSize+gap)+(tileSize/2);
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+
+  function clearLine(){
+    ctx.clearRect(0,0,lineCanvas.width,lineCanvas.height);
+  }
+
+  function updateTimer(){
+    const now=performance.now();
+    const diff=(now - startTime)/1000;
+    timerEl.textContent=diff.toFixed(2)+'초';
+  }
+
+  function endGame(){
+    const now=performance.now();
+    const diff=(now - startTime)/1000;
+    finalTimeEl.textContent=`걸린 시간: ${diff.toFixed(2)}초`;
+    congratsBox.style.display='flex';
+    showScores();
+  }
+
+  saveScoreBtn.addEventListener('click', ()=>{
+    if(scoreSubmitted) return;
+    const name=playerNameInput.value.trim()||"익명";
+    const time=parseFloat(timerEl.textContent);
+    let scores=loadScores();
+    scores.push({name:name,time:time});
+    saveScores(scores);
+    showScores();
+    playerNameInput.disabled=true;
+    saveScoreBtn.disabled=true;
+    scoreSubmitted=true;
+  });
+
+  retryBtn.addEventListener('click', ()=>{
+    congratsBox.style.display='none';
+    startBtn.style.display='block';
+  });
+
+  startBtn.addEventListener('click', ()=>{
+    startBtn.style.display='none';
+    gameContainer.style.display='block';
+    congratsBox.style.display='none';
+    matchedCount=0;selectedTiles=[];
+    tiles=createTiles();
+    drawBoard();
+    clearLine();
+    if(timerInterval)clearInterval(timerInterval);
+    startTime=performance.now();
+    timerInterval=setInterval(updateTimer,100);
+    // 기록 초기화
+    scoreSubmitted=false;
+    playerNameInput.disabled=false;
+    playerNameInput.value="";
+    saveScoreBtn.disabled=false;
+    retryBtn.style.display='none';
+  });
+})();
+</script>
 </body>
 </html>
